@@ -34,6 +34,11 @@ NULL
 #' very high or the first steps very long to compute, consider setting this as
 #' the number of datasets or below.
 #' @param saveEndResults Logical; whether to save the output of the last step.
+#' @param saveIntermediate Logical; whether to save intermediate results (each 
+#' single pipeline run on each dataset). Recommended for high number of pipelines. 
+#' Setting this option to TRUE will decrease resource consumption but increase
+#' computational time. For parsimony, both `saveEndResults` and `saveIntermediate`
+#'  cannot be TRUE. 
 #' @param debug Logical (default FALSE). When enabled, disables multithreading 
 #' and prints extra information.
 #' @param skipErrors Logical. When enabled, `runPipeline` will
@@ -70,7 +75,8 @@ NULL
 #' @export
 runPipeline <- function( datasets, alternatives, pipelineDef, comb=NULL, 
                          output.prefix="", nthreads=1, saveEndResults=TRUE, 
-                         debug=FALSE, skipErrors=TRUE, ...){
+                         debug=FALSE, skipErrors=TRUE, saveIntermediate=FALSE, 
+                         ...){
   mcall <- match.call()
   if(!is(pipelineDef,"PipelineDefinition")) 
     pipelineDef <- PipelineDefinition(pipelineDef)
@@ -84,6 +90,11 @@ runPipeline <- function( datasets, alternatives, pipelineDef, comb=NULL,
   if(any(grepl("\\.",names(datasets)))) 
     warning("It is recommended not to use dots ('.') in dataset names to 
             facilitate browsing aggregated results.")
+  if(saveIntermediate && saveEndResults){
+    saveEndResults <- FALSE
+    warning("It is not recommended to save both intermediate and end results.
+            Forcing saveEndResults to FALSE.")
+  }
   
   # check that output folder exists, otherwise create it
   if(output.prefix!=""){
@@ -124,7 +135,8 @@ runPipeline <- function( datasets, alternatives, pipelineDef, comb=NULL,
                             .runPipelineF( dsi, datasets[[dsi]], pipelineDef, 
                                            alt, eg, output.prefix, noWrite=TRUE,
                                            saveEndResults=saveEndResults,
-                                           skipErrors=skipErrors ),
+                                           skipErrors=skipErrors, 
+                                           saveIntermediate = saveIntermediate),
                               error=function(e){
                                 if(!skipErrors) stop(e)
                                 cat(e)
@@ -157,6 +169,7 @@ runPipeline <- function( datasets, alternatives, pipelineDef, comb=NULL,
                             tryCatch(
                     .runPipelineF(dsi, datasets[[dsi]], pipelineDef, alt, eg,
                                   output.prefix, saveEndResults=saveEndResults,
+                                  saveIntermediate = saveIntermediate, 
                                   skipErrors=skipErrors),
                                      error=function(e){
                                        print(e)
@@ -170,7 +183,8 @@ runPipeline <- function( datasets, alternatives, pipelineDef, comb=NULL,
     if(debug) message("Running in debug mode (single thread)")
     resfiles <- lapply( dsnames, FUN=function(dsi){
       .runPipelineF(dsi, datasets[[dsi]], pipelineDef, alt, eg, output.prefix, 
-                    debug, saveEndResults=saveEndResults, skipErrors=skipErrors)
+                    debug, saveEndResults=saveEndResults,  skipErrors=skipErrors, 
+                    saveIntermediate = saveIntermediate)
     })
   }
 
@@ -234,10 +248,9 @@ Some errors were encountered during the run:")
   res
 }
 
-
 .runPipelineF <- function( dsi, ds, pipelineDef, alt, eg, output.prefix,
                            debug=FALSE, saveEndResults=FALSE, noWrite=FALSE,
-                           skipErrors=FALSE ){
+                           skipErrors=FALSE, saveIntermediate=FALSE ){
   
   if(debug) message(dsi)
   
@@ -337,7 +350,7 @@ Some errors were encountered during the run:")
       }
       objects[[step]] <- x
     }
-    
+
     # compute total time for this iteration
     elapsed.total[[n]] <- sum(vapply(names(args),FUN=function(step){
       ws <- seq_len(sum( vapply(args[seq_len(which(names(args)==step))], 
@@ -346,8 +359,16 @@ Some errors were encountered during the run:")
       elapsed[[step]][[ename]]
     }, numeric(1) ))
     
-    # return final results
-    res[[n]] <- x
+    # return (path to) final results
+    if(saveIntermediate){
+      ename_pretty <- gsub("=", "", ename)
+      ename_pretty <- gsub(";", "_", ename_pretty)
+      filename <- paste0(output.prefix,"res.", ename_pretty,".intermOutputs.rds")
+      saveRDS(x, file=filename)
+      res[[n]] <- filename
+    } else {
+      res[[n]] <- x
+    }
   }
   
   if(debug) message("
@@ -356,7 +377,6 @@ Some errors were encountered during the run:")
   # set names as the combination of arguments
   names(res) <- apply(eg,1,alt=alt,FUN=.args2name)
   names(elapsed.total) <- names(res)
-  
   if(noWrite){
     out <- SimpleList( evaluation=intermediate_return_objects,
                        elapsed=list( stepwise=elapsed, total=elapsed.total ) )
