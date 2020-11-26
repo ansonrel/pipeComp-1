@@ -2,7 +2,7 @@
 
 # pipeComp
 
-`pipeComp` is a simple framework to facilitate the comparison of pipelines involving various steps and parameters. It was initially developed to benchmark single-cell RNA sequencing pipelines:
+ `pipeComp` is a simple framework to facilitate the comparison of pipelines involving various steps and parameters. It was initially developed to benchmark single-cell RNA sequencing pipelines:
 
 _pipeComp, a general framework for the evaluation of computational pipelines, reveals performant single-cell RNA-seq preprocessing tools_<br/>
 Pierre-Luc Germain, Anthony Sonrel & Mark D Robinson, 
